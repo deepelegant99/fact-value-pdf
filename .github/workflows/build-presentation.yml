@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-presentation.yml'
-      - 'scripts/build_presentation.py'
+      - 'scripts/build_presentation.js'
       - 'Content/putnam-fact-value-slides.md'
       - 'Template/**'
   workflow_dispatch:
@@ -20,6 +20,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -27,13 +32,14 @@ jobs:
 
       - name: Install presentation tools
         run: |
+          npm install pptxgenjs
           python -m pip install --upgrade pip
           pip install python-pptx pillow
           sudo apt-get update
           sudo apt-get install -y libreoffice-impress poppler-utils fonts-liberation
 
-      - name: Build PowerPoint from template and Markdown
-        run: python scripts/build_presentation.py
+      - name: Build readable PowerPoint from Markdown
+        run: node scripts/build_presentation.js
 
       - name: Convert PowerPoint to PDF
         run: |
@@ -77,6 +83,6 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add Presentation/putnam-fact-value-slides.pptx Presentation/putnam-fact-value-slides.pdf
           if ! git diff --cached --quiet; then
-            git commit -m 'Build Putnam fact-value presentation'
+            git commit -m 'Build readable Putnam fact-value presentation'
             git push
           fi
