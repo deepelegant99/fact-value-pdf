@@ -60,11 +60,18 @@ def call(s,d,y=6.05,col=TEAL):
     if not d['call']: return
     box(s,.75,y,11.85,.62,col,col); txt(s,d['call'][0],.95,y+.06,11.45,.48,16,WHITE,True,PP_ALIGN.CENTER,MSO_VERTICAL_ANCHOR.MIDDLE)
 def card(s,x,y,w,h,title,body,accent=TEAL,i=None,fs=14):
-    box(s,x,y,w,h,LIGHT); sh=s.shapes.add_shape(MSO_SHAPE.RECTANGLE,Inches(x+.18),Inches(y+.18),Inches(.58),Inches(.16)); sh.fill.solid(); sh.fill.fore_color.rgb=C(accent); sh.line.fill.background()
+    box(s,x,y,w,h,LIGHT); sh=s.shapes.add_shape(MSO_SHAPE.RECTANGLE,Inches(x+.18),Inches(y+.14),Inches(.58),Inches(.13)); sh.fill.solid(); sh.fill.fore_color.rgb=C(accent); sh.line.fill.background()
+    if h < 1.35:
+        if i is not None:
+            c=s.shapes.add_shape(MSO_SHAPE.OVAL,Inches(x+.18),Inches(y+.34),Inches(.38),Inches(.38)); c.fill.solid(); c.fill.fore_color.rgb=C(accent); c.line.fill.background(); txt(s,str(i),x+.18,y+.35,.38,.32,10,WHITE,True,PP_ALIGN.CENTER,MSO_VERTICAL_ANCHOR.MIDDLE); tx=x+.68
+        else: tx=x+.18
+        txt(s,title,tx,y+.18,min(2.0,w*.32),.24,9.5,DARK,True,va=MSO_VERTICAL_ANCHOR.MIDDLE)
+        txt(s,body,tx,y+.45,w-(tx-x)-.18,h-.52,min(fs,11.5),MUT)
+        return
     if i is not None:
         c=s.shapes.add_shape(MSO_SHAPE.OVAL,Inches(x+.18),Inches(y+.47),Inches(.46),Inches(.46)); c.fill.solid(); c.fill.fore_color.rgb=C(accent); c.line.fill.background(); txt(s,str(i),x+.18,y+.48,.46,.4,13,WHITE,True,PP_ALIGN.CENTER,MSO_VERTICAL_ANCHOR.MIDDLE); tx=x+.78
     else: tx=x+.18
-    txt(s,title,tx,y+.44,w-(tx-x)-.18,.42,12,DARK,True,va=MSO_VERTICAL_ANCHOR.MIDDLE); txt(s,body,x+.18,y+.98,w-.36,h-1.1,fs,MUT)
+    txt(s,title,tx,y+.44,w-(tx-x)-.18,.42,12,DARK,True,va=MSO_VERTICAL_ANCHOR.MIDDLE); txt(s,body,x+.18,y+.98,w-.36,max(.25,h-1.1),fs,MUT)
 def generic_cards(s,d):
     header(s,d); intro=d['par'][0] if d['par'] else ''
     if intro: txt(s,intro,.82,1.38,11.5,.45,14,MUT,al=PP_ALIGN.CENTER)
