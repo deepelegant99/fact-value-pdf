@@ -1,242 +1,226 @@
 const pptxgen = require('pptxgenjs');
 const fs = require('fs');
-const path = require('path');
 
-function warnIfSlideHasOverlaps(slide,pptx,options={}){
-  const objs = slide._slideObjects || [];
-  const get = (o)=> o.options || o.data || {};
-  const boxes = objs.map((o,i)=>({i,type:o.type||'object',...get(o)})).filter(b=>Number.isFinite(b.x)&&Number.isFinite(b.y)&&Number.isFinite(b.w)&&Number.isFinite(b.h));
-  for(let a=0;a<boxes.length;a++) for(let b=a+1;b<boxes.length;b++){
-    const A=boxes[a], B=boxes[b];
-    const ix=Math.max(0, Math.min(A.x+A.w,B.x+B.w)-Math.max(A.x,B.x));
-    const iy=Math.max(0, Math.min(A.y+A.h,B.y+B.h)-Math.max(A.y,B.y));
-    if(ix*iy>0.2 && String(A.type).includes('text') && String(B.type).includes('text'))
-      console.warn(`Potential text overlap on slide ${pptx._slides.indexOf(slide)+1}: elements ${A.i} and ${B.i}`);
-  }
-}
-function warnIfSlideElementsOutOfBounds(slide,pptx){
-  const objs = slide._slideObjects || [];
-  const get = (o)=> o.options || o.data || {};
-  objs.forEach((o,i)=>{ const b=get(o); if(Number.isFinite(b.x)&&Number.isFinite(b.y)&&Number.isFinite(b.w)&&Number.isFinite(b.h)){
-    if(b.x<-0.02 || b.y<-0.02 || b.x+b.w>13.353 || b.y+b.h>7.52) console.warn(`Out of bounds on slide ${pptx._slides.indexOf(slide)+1}: element ${i}`);
-  }});
-}
-
-const MD = 'Content/putnam-fact-value-slides.md';
-const OUT = 'Presentation/putnam-fact-value-slides.pptx';
 const pptx = new pptxgen();
-pptx.layout = 'LAYOUT_WIDE';
-pptx.author = 'OpenAI';
-pptx.subject = 'Putnam fact-value presentation';
-pptx.title = 'The Entanglement of Fact and Value';
-pptx.company = 'OpenAI';
-pptx.lang = 'en-US';
-pptx.theme = {
-  headFontFace: 'Arial',
-  bodyFontFace: 'Arial',
-  lang: 'en-US'
-};
-pptx.defineLayout({ name:'CUSTOM_WIDE', width:13.333, height:7.5 });
+pptx.defineLayout({ name: 'CUSTOM_WIDE', width: 13.333, height: 7.5 });
 pptx.layout = 'CUSTOM_WIDE';
+pptx.author = 'Phillip Wong';
+pptx.subject = 'Putnam fact-value entanglement YouTube presentation';
+pptx.title = 'Can Facts Really Be Separated from Values?';
+pptx.company = 'Philosophers and Gamblers';
+pptx.lang = 'en-US';
+pptx.theme = { headFontFace: 'Aptos Display', bodyFontFace: 'Aptos', lang: 'en-US' };
+pptx.margin = 0;
 
-const W=13.333, H=7.5;
+const W = 13.333, H = 7.5;
 const C = {
-  ink:'1F2A2B', text:'344246', mut:'69787A', line:'D9E4E2', paper:'FFFFFF', wash:'F4F8F7', wash2:'EEF7F6',
-  teal:'087C7E', teal2:'0AA1A2', blue:'4CB6D4', green:'86C440', yellow:'F0C845', orange:'EF8B39', red:'D9674E'
+  bg: 'F7F8F6', paper: 'FFFFFF', ink: '142326', text: '304245', muted: '6B7A7C',
+  line: 'D8E2E0', teal: '087C7E', teal2: '10A3A5', blue: '4EA7C4', green: '6DAA45',
+  orange: 'E58A3B', red: 'C65C4B', yellow: 'E3BF4A', paleTeal: 'E8F4F3', paleBlue: 'EAF3F7',
+  paleGreen: 'EFF6E9', paleOrange: 'FBF0E7', paleRed: 'F8ECE9', dark: '0D1A1C'
 };
-const accent = [C.teal,C.blue,C.green,C.orange,C.yellow];
-function mdclean(s){ return (s||'').replace(/\[([^\]]+)\]\(([^)]+)\)/g,'$1').replace(/[*`]/g,'').trim(); }
-function urls(s){ return [...s.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)].map(m=>m[2]); }
-function host(u){ try { return new URL(u).hostname.replace(/^www\./,''); } catch(e){return '';} }
-function parse(){
-  const raw=fs.readFileSync(MD,'utf8');
-  return raw.split(/\n---\s*\n/).map(chunk=>{
-    const m=chunk.match(/^##\s+Slide\s+(\d+)\s+[—-]\s+(.+)$/m);
-    if(!m) return null;
-    const d={n:+m[1], title:mdclean(m[2]), bullets:[], paras:[], callouts:[], table:[], urls:urls(chunk)};
-    const body=chunk.slice(m.index+m[0].length);
-    for(const line of body.split('\n')){
-      let z=line.trim();
-      if(!z) continue;
-      if(z.startsWith('|') && z.endsWith('|')){
-        const cells=z.slice(1,-1).split('|').map(mdclean);
-        if(!cells.every(x=>/^:?-{3,}:?$/.test(x))) d.table.push(cells);
-      } else if(z.startsWith('- ')) d.bullets.push(mdclean(z.slice(2)));
-      else if(z.startsWith('**') && z.endsWith('**')) d.callouts.push(mdclean(z));
-      else if(z.startsWith('*') && z.endsWith('*')) { /* skip image-style notes */ }
-      else {
-        const q=mdclean(z);
-        if(q.endsWith('?') && q.length<150) d.callouts.push(q); else d.paras.push(q);
-      }
-    }
-    return d;
-  }).filter(Boolean).sort((a,b)=>a.n-b.n);
+
+function addBg(slide, color=C.bg) { slide.background = { color }; }
+function addTop(slide, n, title, kicker='PUTNAM · FACT / VALUE') {
+  addBg(slide);
+  slide.addShape(pptx.ShapeType.rect,{x:0,y:0,w:W,h:0.12,fill:{color:C.teal},line:{color:C.teal}});
+  slide.addText(kicker,{x:0.55,y:0.34,w:4.6,h:0.22,fontFace:'Aptos',fontSize:9,bold:true,color:C.teal,margin:0,charSpacing:0.4});
+  slide.addText(String(n).padStart(2,'0'),{x:12.15,y:0.32,w:0.6,h:0.22,fontSize:9,bold:true,color:C.muted,align:'right',margin:0});
+  slide.addText(title,{x:0.55,y:0.72,w:12.0,h:0.6,fontFace:'Aptos Display',fontSize:27,bold:true,color:C.ink,margin:0,fit:'shrink'});
+  slide.addShape(pptx.ShapeType.line,{x:0.55,y:1.40,w:1.55,h:0,line:{color:C.teal,width:2.2}});
 }
-function section(d){
-  if(d.n<=10) return ['ECONOMICS + MEASUREMENT', C.green];
-  if(d.n<=19) return ['POLITICS + HISTORY', C.blue];
-  if(d.n<=28) return ["PUTNAM'S ARGUMENT", C.teal];
-  return ['STAKES + READING', C.orange];
+function addSub(slide, text, y=1.52) {
+  slide.addText(text,{x:0.75,y,w:11.8,h:0.38,fontSize:14.5,color:C.muted,align:'center',margin:0,fit:'shrink'});
 }
-function addHeader(slide,d){
-  slide.background = { color: C.paper };
-  const [s,col]=section(d);
-  slide.addShape(pptx.ShapeType.rect,{x:0,y:0,w:W,h:0.18,fill:{color:col},line:{color:col}});
-  slide.addText(s,{x:0.55,y:0.36,w:5.5,h:0.23,fontFace:'Arial',fontSize:9,bold:true,color:col,margin:0,fit:'shrink'});
-  slide.addText(String(d.n).padStart(2,'0'),{x:12.05,y:0.34,w:0.65,h:0.25,fontSize:9,bold:true,color:C.mut,align:'right',margin:0});
-  slide.addText(d.title,{x:0.55,y:0.72,w:11.8,h:0.55,fontSize:d.title.length>62?22:26,bold:true,color:C.ink,margin:0,breakLine:false,fit:'shrink'});
-  slide.addShape(pptx.ShapeType.line,{x:0.55,y:1.35,w:1.45,h:0,line:{color:col,width:2.5}});
+function pill(slide, text, x,y,w,h, color, fs=18) {
+  slide.addText(text,{x,y,w,h,fontSize:fs,bold:true,color:'FFFFFF',align:'center',valign:'mid',margin:0.06,
+    fill:{color},line:{color},radius:0.14,fit:'shrink'});
 }
-function footer(slide,d){
-  const hs=[...new Set(d.urls.map(host).filter(Boolean))];
-  if(hs.length) slide.addText('sources: '+hs.join(' · '),{x:0.55,y:7.13,w:9.9,h:0.16,fontSize:6.8,color:C.mut,margin:0,fit:'shrink'});
+function card(slide, x,y,w,h, title, body, color=C.teal, fill=C.paper) {
+  slide.addShape(pptx.ShapeType.roundRect,{x,y,w,h,rectRadius:0.08,fill:{color:fill},line:{color:C.line,width:1.1}});
+  slide.addShape(pptx.ShapeType.rect,{x,y,w:0.08,h,fill:{color},line:{color}});
+  if(title) slide.addText(title,{x:x+0.28,y:y+0.22,w:w-0.5,h:0.36,fontSize:15,bold:true,color,margin:0,fit:'shrink'});
+  slide.addText(body,{x:x+0.28,y:y+0.72,w:w-0.55,h:h-0.9,fontSize:16.5,color:C.text,margin:0.02,breakLine:false,fit:'shrink',valign:'mid'});
 }
-function addCallout(slide,text,col=C.teal,y=6.3){
-  if(!text) return;
-  slide.addText(text,{x:0.75,y,w:11.85,h:0.52,margin:0.08,fontSize:text.length>110?14.5:17,bold:true,color:'FFFFFF',align:'center',valign:'mid',fill:{color:col},line:{color:col},radius:0.11,fit:'shrink'});
+function arrow(slide, x1,y1,x2,y2,color=C.teal,width=2.2,end='triangle') {
+  slide.addShape(pptx.ShapeType.line,{x:x1,y:y1,w:x2-x1,h:y2-y1,line:{color,width,beginArrowType:'none',endArrowType:end}});
 }
-function bulletLines(slide,bullets,x,y,w,h,opts={}){
-  const fs=opts.fontSize||18;
-  const arr=bullets.slice(0,opts.max||4).map(b=>({text:'• '+b, options:{bullet:false,breakLine:true}}));
-  slide.addText(arr,{x,y,w,h,fontSize:fs,color:C.text,breakLine:false,fit:'shrink',margin:0.02,paraSpaceAfterPt:9,bold:false});
+function label(slide, text, x,y,w,h, fs=18, color=C.ink, bold=false, align='center') {
+  slide.addText(text,{x,y,w,h,fontSize:fs,color,bold,align,valign:'mid',margin:0.02,fit:'shrink'});
 }
-function pill(slide,text,x,y,w,h,col,fs=18){
-  slide.addText(text,{x,y,w,h,margin:0.08,fontSize:fs,bold:true,color:'FFFFFF',align:'center',valign:'mid',fill:{color:col},line:{color:col},radius:0.2,fit:'shrink'});
+function callout(slide, text, color=C.teal, y=6.45) {
+  slide.addText(text,{x:0.8,y,w:11.73,h:0.58,fontSize:16.2,bold:true,color:'FFFFFF',align:'center',valign:'mid',margin:0.05,
+    fill:{color},line:{color},radius:0.12,fit:'shrink'});
 }
-function bigBlock(slide,label,body,x,y,w,h,col,fs=20){
-  slide.addText(label.toUpperCase(),{x,y,w,h:0.28,fontSize:9,bold:true,color:col,margin:0,fit:'shrink'});
-  slide.addText(body,{x,y:y+0.42,w,h:h-0.42,fontSize:fs,bold:false,color:C.text,margin:0.02,breakLine:false,fit:'shrink',valign:'mid'});
+function footer(slide, text='') {
+  if(text) slide.addText(text,{x:0.58,y:7.17,w:11.4,h:0.13,fontSize:6.8,color:C.muted,margin:0,fit:'shrink'});
 }
-function twoColumn(slide,d,leftLabel='ONE',rightLabel='TWO'){
-  addHeader(slide,d);
-  const items = d.bullets.length>=2 ? d.bullets : d.paras;
-  bigBlock(slide,leftLabel,items[0]||'',0.85,1.75,5.55,3.45,C.blue,22);
-  bigBlock(slide,rightLabel,items[1]||'',6.95,1.75,5.55,3.45,C.orange,22);
-  const extra = (items.length>2?items.slice(2):d.paras.slice(2)).join(' ');
-  if(extra) slide.addText(extra,{x:1.1,y:5.42,w:11.1,h:0.55,fontSize:15,color:C.mut,align:'center',margin:0,fit:'shrink'});
-  addCallout(slide,d.callouts[0],section(d)[1]); footer(slide,d);
+function axis(slide, ox, oy, w, h) {
+  arrow(slide,ox,oy,ox+w,oy,C.muted,1.3);
+  arrow(slide,ox,oy,ox,oy-h,C.muted,1.3);
+  label(slide,'f',ox+w-0.15,oy+0.12,0.35,0.25,15,C.muted,true);
+  label(slide,'v',ox-0.35,oy-h-0.18,0.3,0.25,15,C.muted,true);
 }
-function listSlide(slide,d){
-  addHeader(slide,d);
-  if(d.paras[0]) slide.addText(d.paras[0],{x:0.95,y:1.55,w:11.4,h:0.5,fontSize:17,color:C.mut,align:'center',margin:0.02,fit:'shrink'});
-  bulletLines(slide,d.bullets,1.35,2.25,10.7,2.9,{fontSize:20,max:4});
-  const rest=d.paras.slice(1).join(' ');
-  if(rest) slide.addText(rest,{x:1.25,y:5.25,w:10.9,h:0.5,fontSize:15.5,color:C.mut,align:'center',margin:0,fit:'shrink'});
-  addCallout(slide,d.callouts[0],section(d)[1]); footer(slide,d);
+function dot(slide,x,y,color=C.teal,r=0.14) { slide.addShape(pptx.ShapeType.ellipse,{x:x-r,y:y-r,w:2*r,h:2*r,fill:{color},line:{color}}); }
+function node(slide,text,x,y,w,h,color=C.teal,fill=C.paper,fs=17){
+  slide.addText(text,{x,y,w,h,fontSize:fs,bold:true,color,align:'center',valign:'mid',margin:0.05,fill:{color:fill},line:{color,width:1.6},radius:0.12,fit:'shrink'});
 }
-function stepsSlide(slide,d){
-  addHeader(slide,d);
-  if(d.paras[0]) slide.addText(d.paras[0],{x:0.95,y:1.55,w:11.4,h:0.4,fontSize:16,color:C.mut,align:'center',margin:0,fit:'shrink'});
-  const n=Math.min(4,d.bullets.length);
-  const gap=0.25, startX=0.78, cardW=(11.8-(n-1)*gap)/n;
-  for(let i=0;i<n;i++){
-    pill(slide,String(i+1),startX+i*(cardW+gap)+cardW/2-0.27,2.32,0.54,0.54,accent[i],20);
-    slide.addText(d.bullets[i],{x:startX+i*(cardW+gap),y:3.1,w:cardW,h:1.45,fontSize:16.5,color:C.text,align:'center',margin:0.05,fit:'shrink'});
-  }
-  addCallout(slide,d.callouts[0],section(d)[1]); footer(slide,d);
+
+{
+  const s=pptx.addSlide(); addBg(s,C.dark);
+  s.addShape(pptx.ShapeType.rect,{x:0,y:0,w:0.18,h:H,fill:{color:C.teal2},line:{color:C.teal2}});
+  s.addText('CAN FACTS REALLY BE\nSEPARATED FROM VALUES?',{x:0.8,y:0.8,w:7.0,h:1.6,fontFace:'Aptos Display',fontSize:32,bold:true,color:'FFFFFF',margin:0,breakLine:false,fit:'shrink'});
+  s.addText('A visual introduction to Hilary Putnam’s fact–value entanglement',{x:0.82,y:2.6,w:6.7,h:0.5,fontSize:17,color:'C9D8D8',margin:0,fit:'shrink'});
+  pill(s,'FACTS',8.1,1.15,3.8,0.86,C.teal,23);
+  label(s,'“The temperature is 90°F”',8.05,2.15,4.0,0.45,14,'D5E2E2');
+  s.addText('↕',{x:9.4,y:2.72,w:1.3,h:0.55,fontSize:30,bold:true,color:'FFFFFF',align:'center',margin:0});
+  pill(s,'VALUES',8.1,3.35,3.8,0.86,C.green,23);
+  label(s,'“Cruelty is bad”',8.05,4.35,4.0,0.45,14,'D5E2E2');
+  s.addText('The ordinary picture looks clean. Too clean.',{x:0.82,y:5.4,w:6.9,h:0.7,fontSize:20,bold:true,color:'FFFFFF',margin:0,fit:'shrink'});
+  s.addText('01',{x:12.1,y:6.95,w:0.6,h:0.24,fontSize:9,bold:true,color:'8CA0A1',align:'right',margin:0});
 }
-function titleSlide(slide,d){
-  slide.background={color:C.paper};
-  slide.addShape(pptx.ShapeType.rect,{x:0,y:0,w:0.18,h:H,fill:{color:C.teal},line:{color:C.teal}});
-  slide.addText('FACT / VALUE',{x:0.75,y:0.65,w:3.2,h:0.25,fontSize:11,bold:true,color:C.teal,margin:0});
-  slide.addText(d.title,{x:0.75,y:1.25,w:6.1,h:1.05,fontSize:34,bold:true,color:C.ink,margin:0,fit:'shrink'});
-  slide.addText(d.paras.slice(0,2).join(' '),{x:0.78,y:2.7,w:5.8,h:0.88,fontSize:18,color:C.mut,margin:0,fit:'shrink'});
-  pill(slide,'FACT',7.35,1.55,4.55,0.9,C.teal,24);
-  slide.addText('+',{x:8.95,y:2.7,w:1.35,h:0.58,fontSize:38,bold:true,color:C.ink,align:'center',margin:0});
-  pill(slide,'VALUE',7.35,3.58,4.55,0.9,C.green,24);
-  slide.addText('not two sealed boxes', {x:7.35,y:4.85,w:4.55,h:0.35,fontSize:15,color:C.mut,align:'center',margin:0});
-  slide.addText('Hilary Putnam - The Entanglement of Fact and Value',{x:0.78,y:5.35,w:5.9,h:0.38,fontSize:15,bold:true,color:C.ink,margin:0});
-  addCallout(slide,d.callouts[0],C.teal,6.22); footer(slide,d);
+{
+  const s=pptx.addSlide(); addTop(s,2,'The traditional dichotomy'); addSub(s,'The picture we are about to test.');
+  card(s,0.9,2.15,5.4,3.25,'F = FACTS','observation\nmeasurement\nempirical claims\ntheory',C.blue,C.paleBlue);
+  card(s,7.0,2.15,5.4,3.25,'V = VALUES','good / bad\nright / wrong\nrational / irrational\nought',C.orange,C.paleOrange);
+  label(s,'F ∩ V = ∅',5.1,5.68,3.15,0.55,28,C.ink,true);
+  callout(s,'The alleged boundary: description on one side, evaluation on the other.',C.teal);
 }
-function progressSlide(slide,d){
-  addHeader(slide,d);
-  slide.addText('5%',{x:0.9,y:1.72,w:2.8,h:0.8,fontSize:54,bold:true,color:C.green,align:'center',margin:0});
-  slide.addText('GDP growth',{x:1.0,y:2.6,w:2.6,h:0.25,fontSize:13,bold:true,color:C.ink,align:'center',margin:0});
-  const items=d.bullets.slice(1,4);
-  items.forEach((b,i)=>{
-    slide.addText(b,{x:4.45,y:1.72+i*0.95,w:7.3,h:0.55,fontSize:18.5,color:C.text,margin:0.06,fill:{color:C.wash},line:{color:C.line},fit:'shrink'});
-  });
-  addCallout(slide,d.callouts[0],C.teal); footer(slide,d);
+{
+  const s=pptx.addSlide(); addTop(s,3,'The first crack: mutual influence'); addSub(s,'Even before Putnam, the clean wall starts leaking.');
+  node(s,'V\nvalues / priorities',1.15,2.5,3.15,1.25,C.green,C.paleGreen,19);
+  node(s,'F\nfacts / institutions / theories',9.0,2.5,3.15,1.25,C.blue,C.paleBlue,18);
+  arrow(s,4.5,2.88,8.85,2.88,C.green,3); arrow(s,8.85,3.42,4.5,3.42,C.blue,3);
+  label(s,'Values select what gets built, funded, measured, defended.',1.0,4.45,5.1,0.62,16,C.text,false,'left');
+  label(s,'Facts and consequences reshape what people value next.',7.15,4.45,5.1,0.62,16,C.text,false,'left');
+  ['law','research agenda','design choice'].forEach((t,i)=>pill(s,t,1.2+i*1.55,5.35,1.35,0.44,[C.green,C.teal,C.orange][i],11.5));
+  callout(s,'V → F and F → V: interaction is real. But interaction alone is not yet Putnam.',C.teal);
 }
-function allocationSlide(slide,d){
-  addHeader(slide,d);
-  slide.addText('99',{x:1.0,y:1.72,w:1.6,h:0.7,fontSize:42,bold:true,color:C.teal,margin:0});
-  slide.addText('1',{x:11.3,y:1.72,w:0.5,h:0.7,fontSize:42,bold:true,color:C.orange,align:'right',margin:0});
-  slide.addShape(pptx.ShapeType.rect,{x:1.0,y:2.67,w:10.65,h:0.5,fill:{color:C.teal},line:{color:C.teal}});
-  slide.addShape(pptx.ShapeType.rect,{x:11.65,y:2.67,w:0.18,h:0.5,fill:{color:C.orange},line:{color:C.orange}});
-  bulletLines(slide,d.bullets,1.05,3.75,11.1,1.3,{fontSize:18,max:3});
-  addCallout(slide,d.callouts[0],C.teal); footer(slide,d);
+{
+  const s=pptx.addSlide(); addTop(s,4,'Interaction is not yet entanglement'); addSub(s,'A useful objection keeps us honest.');
+  node(s,'Thermostat',1.25,2.45,3.2,1.0,C.blue,C.paleBlue,20); node(s,'Furnace',8.9,2.45,3.2,1.0,C.orange,C.paleOrange,20);
+  arrow(s,4.65,2.78,8.7,2.78,C.blue,2.5); arrow(s,8.7,3.28,4.65,3.28,C.orange,2.5);
+  label(s,'They interact.',1.25,4.1,3.2,0.45,19,C.ink,true); label(s,'They are not the same thing.',8.45,4.1,4.1,0.45,19,C.ink,true);
+  callout(s,'V → F and F → V  ≠  conceptual inseparability',C.red);
 }
-function efficiencySlide(slide,d){
-  addHeader(slide,d);
-  ['99 / 1','50 / 50'].forEach((lab,j)=>{
-    const x=1.0+j*6.0;
-    slide.addText(lab,{x,y:1.75,w:4.9,h:0.45,fontSize:28,bold:true,color:j?C.green:C.orange,align:'center',margin:0});
-    slide.addText('Pareto efficient',{x,y:2.35,w:4.9,h:0.35,fontSize:17,bold:true,color:C.ink,align:'center',margin:0});
-    const a=j?2.25:4.45, b=j?2.25:0.12;
-    slide.addShape(pptx.ShapeType.rect,{x:x+0.15,y:3.22,w:a,h:0.42,fill:{color:C.teal},line:{color:C.teal}});
-    slide.addShape(pptx.ShapeType.rect,{x:x+0.15+a,y:3.22,w:b,h:0.42,fill:{color:C.orange},line:{color:C.orange}});
-  });
-  slide.addText(d.paras.join(' '),{x:1.2,y:4.52,w:10.85,h:0.6,fontSize:16,color:C.mut,align:'center',margin:0,fit:'shrink'});
-  addCallout(slide,d.callouts[0],C.teal); footer(slide,d);
+{
+  const s=pptx.addSlide(); addTop(s,5,'Enter the thick concept'); addSub(s,'Putnam’s pressure point is not causal. It is conceptual.');
+  s.addShape(pptx.ShapeType.ellipse,{x:3.2,y:2.08,w:3.45,h:3.0,fill:{color:C.paleBlue,transparency:5},line:{color:C.blue,width:2}});
+  s.addShape(pptx.ShapeType.ellipse,{x:6.45,y:2.08,w:3.45,h:3.0,fill:{color:C.paleOrange,transparency:5},line:{color:C.orange,width:2}});
+  label(s,'description',3.5,2.35,2.3,0.35,15,C.blue,true); label(s,'evaluation',7.3,2.35,2.0,0.35,15,C.orange,true);
+  label(s,'CRUEL',5.35,3.05,2.65,0.78,34,C.ink,true);
+  label(s,'“The guard behaved cruelly toward the prisoner.”',2.2,5.35,8.9,0.62,18,C.text,true);
+  callout(s,'A thick concept seems to say what happened and how to assess it.',C.teal);
 }
-function tableSlide(slide,d){
-  addHeader(slide,d);
-  const rows=d.table.slice(1,4);
-  rows.forEach((r,i)=>{
-    const y=1.7+i*1.28;
-    slide.addText(['POWER','BELIEF','JUSTIFICATION'][i],{x:0.85,y,w:2.15,h:0.8,fontSize:16,bold:true,color:'FFFFFF',align:'center',valign:'mid',margin:0.05,fill:{color:accent[i]},line:{color:accent[i]},fit:'shrink'});
-    slide.addText(r[0],{x:3.25,y,w:4.5,h:0.8,fontSize:17.5,bold:true,color:C.text,margin:0.05,fill:{color:C.wash},line:{color:C.line},fit:'shrink'});
-    slide.addText(r[1],{x:8.0,y,w:4.3,h:0.8,fontSize:16,color:C.mut,margin:0.05,fill:{color:C.wash},line:{color:C.line},fit:'shrink'});
-  });
-  addCallout(slide,d.callouts[0],C.teal); footer(slide,d);
+{
+  const s=pptx.addSlide(); addTop(s,6,'The tempting decomposition'); addSub(s,'The clean split tries to survive.');
+  node(s,'CRUEL',0.95,2.55,2.2,0.9,C.ink,C.paper,24);
+  arrow(s,3.25,3.0,4.45,2.35,C.muted,2.2); arrow(s,3.25,3.0,4.45,4.65,C.muted,2.2);
+  card(s,4.6,1.8,7.55,1.65,'D = NEUTRAL DESCRIPTION','hit the prisoner · humiliated him · withheld food · caused pain',C.blue,C.paleBlue);
+  card(s,4.6,4.15,7.55,1.65,'E = EVALUATION','bad · wrong · condemnable · not to be done',C.orange,C.paleOrange);
+  callout(s,'Cruel = D + E ?',C.red);
 }
-function conceptsSlide(slide,d){
-  addHeader(slide,d);
-  const words=d.bullets.slice(0,3).map(x=>x.replace(/\.$/,''));
-  words.forEach((w,i)=> pill(slide,w.toUpperCase(),1.1+i*4.05,2.25,2.85,1.15,accent[[3,1,2][i]],22));
-  slide.addText((d.paras[1]||'')+' '+(d.paras[2]||''),{x:1.6,y:4.35,w:10.1,h:0.65,fontSize:18,color:C.text,align:'center',margin:0,fit:'shrink'});
-  addCallout(slide,d.callouts[0],C.teal); footer(slide,d);
+{
+  const s=pptx.addSlide(); addTop(s,7,'Putnam: not so fast'); addSub(s,'The value is not merely stapled on afterward.');
+  card(s,0.8,2.05,3.15,3.2,'RAW BEHAVIORS','“caused pain”\n“taught discipline”\n“humiliated for amusement”\n“followed policy”',C.blue,C.paleBlue);
+  node(s,'Which details\nmatter?',5.0,2.72,3.2,1.2,C.teal,C.paleTeal,19);
+  node(s,'Cruelty\njudgment',9.35,2.72,3.0,1.2,C.orange,C.paleOrange,19);
+  arrow(s,4.0,3.3,4.85,3.3,C.blue,2.4); arrow(s,8.25,3.3,9.2,3.3,C.teal,2.4); arrow(s,10.85,4.1,7.55,5.05,C.orange,2.4);
+  label(s,'evaluative understanding guides\nselection and interpretation',5.0,4.55,3.3,0.72,15,C.text,true);
+  callout(s,'To recognize the relevant facts as cruelty, you already need the evaluative concept.',C.teal);
 }
-function readingSlide(slide,d){
-  addHeader(slide,d);
-  slide.addText('HILARY\nPUTNAM',{x:1.05,y:1.65,w:3.6,h:1.15,fontSize:27,bold:true,color:'FFFFFF',align:'center',valign:'mid',margin:0.06,fill:{color:C.ink},line:{color:C.ink},fit:'shrink'});
-  slide.addText('The Entanglement\nof Fact and Value',{x:1.05,y:3.1,w:3.6,h:0.85,fontSize:18,bold:true,color:C.green,align:'center',valign:'mid',margin:0.04,fill:{color:C.ink},line:{color:C.ink},fit:'shrink'});
-  slide.addText('2002 - Chapter 2 - pp. 28-45',{x:1.05,y:4.22,w:3.6,h:0.28,fontSize:12,color:'DDE6E3',align:'center',margin:0});
-  bulletLines(slide,d.bullets,5.35,1.7,6.8,3.45,{fontSize:18.5,max:3});
-  addCallout(slide,d.callouts[0],C.teal); footer(slide,d);
+{
+  const s=pptx.addSlide(); addTop(s,8,'A visual model of judgment'); addSub(s,'This is our map, not Putnam’s math.');
+  axis(s,2.05,5.75,8.9,3.45); dot(s,6.7,3.55,C.teal,0.18);
+  label(s,'f = descriptive content',9.4,5.8,2.5,0.35,14,C.muted); label(s,'v = evaluative content',0.75,2.05,2.5,0.35,14,C.muted);
+  node(s,'J = (f, v)',8.45,2.55,2.9,0.85,C.teal,C.paleTeal,22);
+  callout(s,'A judgment can have both descriptive and evaluative coordinates.',C.teal);
 }
-function generic(slide,d){
-  if(d.bullets.length>=4) return listSlide(slide,d);
-  if(d.bullets.length>=1) return stepsSlide(slide,d);
-  addHeader(slide,d);
-  const text=d.paras.join('\n\n');
-  slide.addText(text,{x:1.05,y:1.75,w:11.0,h:3.6,fontSize:22,color:C.text,margin:0.02,fit:'shrink',breakLine:false,align:'center',valign:'mid'});
-  addCallout(slide,d.callouts[0],section(d)[1]); footer(slide,d);
+{
+  const s=pptx.addSlide(); addTop(s,9,'Some judgments lean descriptive'); addSub(s,'The model allows degrees.');
+  axis(s,2.05,5.75,8.9,3.45); dot(s,9.8,5.18,C.blue,0.18);
+  label(s,'“thermometer reads 22°C”',7.1,4.3,3.8,0.5,17,C.text,true); label(s,'“water boils at sea level”',7.1,3.72,3.8,0.45,15,C.muted);
+  node(s,'J₁ ≈ (0.95, 0.05)',4.35,2.55,3.2,0.82,C.blue,C.paleBlue,20);
+  callout(s,'Close to the descriptive axis does not mean literally value-free.',C.blue);
 }
-function makeSlide(d){
-  const slide=pptx.addSlide();
-  if(d.n===1) titleSlide(slide,d);
-  else if(d.n===3) progressSlide(slide,d);
-  else if(d.n===5 || d.n===6 || d.n===20 || d.n===23 || d.n===26) twoColumn(slide,d,d.n===5?'DESCRIPTIVE':'SIDE A',d.n===5?'EVALUATIVE':'SIDE B');
-  else if(d.n===9) allocationSlide(slide,d);
-  else if(d.n===10) efficiencySlide(slide,d);
-  else if(d.n===14) tableSlide(slide,d);
-  else if(d.n===21) conceptsSlide(slide,d);
-  else if(d.n===30) readingSlide(slide,d);
-  else generic(slide,d);
-  warnIfSlideHasOverlaps(slide,pptx,{muteContainment:true,ignoreLines:true,ignoreDecorativeShapes:true});
-  warnIfSlideElementsOutOfBounds(slide,pptx);
+{
+  const s=pptx.addSlide(); addTop(s,10,'Some judgments lean evaluative'); addSub(s,'The other extreme also exists.');
+  axis(s,2.05,5.75,8.9,3.45); dot(s,2.95,2.75,C.orange,0.18);
+  label(s,'“admirable”',3.35,2.42,2.5,0.45,18,C.text,true); label(s,'“disgusting”',3.35,3.0,2.5,0.45,16,C.muted);
+  node(s,'J₂ ≈ (0.10, 0.90)',7.0,2.55,3.2,0.82,C.orange,C.paleOrange,20);
+  callout(s,'Some claims are overwhelmingly evaluative without being empty of description.',C.orange);
 }
-function credits(){
-  const s=pptx.addSlide();
-  s.background={color:C.paper};
-  s.addText('Credits',{x:0.85,y:0.9,w:6,h:0.6,fontSize:32,bold:true,color:C.ink,margin:0});
-  s.addText('Original visual direction: Ecology Infographics by Slidesgo.\nDeck rebuilt for readability from the Markdown source in the repository.',{x:0.9,y:2.0,w:10.8,h:1.2,fontSize:19,color:C.text,margin:0.02,fit:'shrink'});
+{
+  const s=pptx.addSlide(); addTop(s,11,'The thick region'); addSub(s,'Much of human life sits in the middle.');
+  axis(s,2.05,5.75,8.9,3.45);
+  s.addShape(pptx.ShapeType.ellipse,{x:4.5,y:2.55,w:4.25,h:2.3,fill:{color:C.paleTeal,transparency:18},line:{color:C.teal,width:1.5,dash:'dash'}});
+  [['cruel',5.25,3.08,C.red],['brave',6.45,3.7,C.green],['unjust',7.15,2.9,C.orange],['dishonest',5.15,4.1,C.blue],['reasonable',7.0,4.2,C.teal]].forEach(([t,x,y,c])=>{dot(s,x,y,c,0.11);label(s,t,x+0.15,y-0.17,1.5,0.32,13,c,true,'left');});
+  callout(s,'Thick concepts occupy the zone where description and evaluation travel together.',C.teal);
 }
-const data=parse();
-if(data.length!==30) throw new Error('Expected 30 slides, got '+data.length);
-data.forEach(makeSlide);
-credits();
-fs.mkdirSync(path.dirname(OUT),{recursive:true});
-pptx.writeFile({ fileName: OUT });
+{
+  const s=pptx.addSlide(); addTop(s,12,'Static entanglement is only the beginning'); addSub(s,'Now we let the picture move through time.');
+  const xs=[1.3,5.15,9.0]; const labs=['J₀','J₁','J₂']; const ts=['t₀','t₁','t₂'];
+  xs.forEach((x,i)=>{node(s,labs[i],x,2.4,2.3,1.2,[C.blue,C.teal,C.orange][i],[C.paleBlue,C.paleTeal,C.paleOrange][i],24);label(s,ts[i],x+0.75,3.9,0.8,0.35,15,C.muted,true);if(i<2) arrow(s,x+2.45,3.0,xs[i+1]-0.15,3.0,C.muted,2.2);});
+  label(s,'Jₜ = (fₜ, vₜ)',4.65,5.1,4.0,0.6,26,C.ink,true);
+  callout(s,'The judgment changes because both our factual situation and our evaluative orientation can change.',C.teal);
+}
+{
+  const s=pptx.addSlide(); addTop(s,13,'Values guide inquiry'); addSub(s,'Inquiry starts with standards, interests, and priorities.');
+  node(s,'V₀\nstarting values',1.2,2.45,3.15,1.3,C.green,C.paleGreen,19);
+  node(s,'T₁\ntheory / practice',8.95,2.45,3.15,1.3,C.blue,C.paleBlue,19); arrow(s,4.5,3.1,8.75,3.1,C.teal,3);
+  ['What counts as important?','What counts as elegant?','What counts as explanation?'].forEach((t,i)=>label(s,t,2.0,4.45+i*0.47,5.2,0.33,15,C.text,false,'left'));
+  ['simplicity','evidence','scope','fairness'].forEach((t,i)=>pill(s,t,7.9+(i%2)*1.75,4.45+Math.floor(i/2)*0.62,1.55,0.44,[C.green,C.blue,C.teal,C.orange][i],11.5));
+  callout(s,'Values do not dictate the answer. They help determine what counts as a question and a good answer.',C.teal);
+}
+{
+  const s=pptx.addSlide(); addTop(s,14,'Inquiry reshapes value'); addSub(s,'The return loop is where the machine gets interesting.');
+  const xs=[0.85,3.25,5.65,8.05,10.45]; const labs=['V₀','T₁','V₁','T₂','V₂']; const cols=[C.green,C.blue,C.green,C.blue,C.orange]; const fills=[C.paleGreen,C.paleBlue,C.paleGreen,C.paleBlue,C.paleOrange];
+  xs.forEach((x,i)=>{node(s,labs[i],x,2.55,1.75,1.0,cols[i],fills[i],22);if(i<4)arrow(s,x+1.82,3.05,xs[i+1]-0.08,3.05,C.muted,2.2);});
+  label(s,'standards',0.9,4.15,1.65,0.3,13,C.muted);label(s,'theory',3.3,4.15,1.65,0.3,13,C.muted);label(s,'revised standards',5.42,4.15,2.2,0.3,13,C.muted);label(s,'new theory',8.0,4.15,1.9,0.3,13,C.muted);label(s,'new values',10.4,4.15,1.9,0.3,13,C.muted);
+  label(s,'V₀ → T₁ → V₁ → T₂ → V₂ → …',3.05,5.0,7.2,0.6,25,C.ink,true);
+  callout(s,'Inquiry is recursive: standards shape inquiry; successful inquiry can reshape standards.',C.teal);
+}
+{
+  const s=pptx.addSlide(); addTop(s,15,'Artifact loop'); addSub(s,'Values become things; things train future values.');
+  const nodes=[['Value\nstandards',0.65,C.green,C.paleGreen],['Design / UI\nArtifact',3.55,C.blue,C.paleBlue],['Use /\nExperience',6.45,C.orange,C.paleOrange],['New\nstandards',9.35,C.teal,C.paleTeal]];
+  nodes.forEach(([t,x,c,f],i)=>{node(s,t,x,2.45,2.45,1.25,c,f,18);if(i<3)arrow(s,x+2.55,3.08,x+2.8,3.08,C.muted,2.2);});
+  arrow(s,10.55,4.0,1.65,5.15,C.teal,2.2); label(s,'feedback',5.95,4.55,1.4,0.35,14,C.teal,true);
+  label(s,'Vₜ → Aₜ → Vₜ₊₁',4.5,5.55,4.3,0.55,25,C.ink,true);
+  callout(s,'Aesthetic and practical values shape artifacts; living with artifacts reshapes taste and expectation.',C.teal);
+}
+{
+  const s=pptx.addSlide(); addTop(s,16,'World, belief, value, action'); addSub(s,'The agent-level feedback loop.');
+  const ns=[['Wₜ\nworld',0.65,C.blue,C.paleBlue],['Bₜ\nbelief',3.15,C.teal,C.paleTeal],['Vₜ\nvalue',5.65,C.green,C.paleGreen],['Aₜ\naction',8.15,C.orange,C.paleOrange],['Wₜ₊₁\nnew world',10.65,C.red,C.paleRed]];
+  ns.forEach(([t,x,c,f],i)=>{node(s,t,x,2.55,1.95,1.15,c,f,18);if(i<4)arrow(s,x+2.02,3.13,x+2.35,3.13,C.muted,2.2);});
+  arrow(s,11.7,4.1,1.55,5.3,C.teal,2.0); label(s,'new state → new evidence → new evaluation',3.7,4.85,6.0,0.45,15,C.teal,true);
+  callout(s,'We do not merely observe state space. Evaluation helps determine which state we try to move into.',C.teal);
+}
+{
+  const s=pptx.addSlide(); addTop(s,17,'A coupled dynamical system'); addSub(s,'Not identical. Not independent.');
+  node(s,'Fₜ\nfactual state',1.05,2.25,3.1,1.2,C.blue,C.paleBlue,20); node(s,'Vₜ\nvalue state',1.05,4.25,3.1,1.2,C.green,C.paleGreen,20);
+  node(s,'Fₜ₊₁',9.25,2.25,3.1,1.2,C.blue,C.paleBlue,22); node(s,'Vₜ₊₁',9.25,4.25,3.1,1.2,C.green,C.paleGreen,22);
+  arrow(s,4.3,2.85,9.05,2.85,C.blue,2.5); arrow(s,4.3,4.85,9.05,4.85,C.green,2.5); arrow(s,4.1,2.95,9.1,4.55,C.teal,2.0); arrow(s,4.1,4.55,9.1,3.15,C.orange,2.0);
+  label(s,'coupling',5.95,3.52,1.5,0.4,14,C.teal,true);
+  callout(s,'(Fₜ, Vₜ) ↦ (Fₜ₊₁, Vₜ₊₁)',C.ink);
+}
+{
+  const s=pptx.addSlide(); addTop(s,18,'Rationality is already normative'); addSub(s,'The strongest “pure fact” refuge is not pure.');
+  node(s,'RATIONALITY',4.55,2.0,4.2,0.9,C.teal,C.paleTeal,25);
+  const items=[['follow evidence',1.0,3.55,C.blue,C.paleBlue],['avoid contradiction',3.95,3.55,C.red,C.paleRed],['revise belief',6.9,3.55,C.green,C.paleGreen],['prefer better explanations',9.85,3.55,C.orange,C.paleOrange]];
+  items.forEach(([t,x,y,c,f])=>node(s,t,x,y,2.5,1.0,c,f,15.5));
+  items.forEach(([t,x,y])=>arrow(s,6.65,2.95,x+1.25,y-0.13,C.muted,1.5));
+  label(s,'These are standards for how one ought to reason—not merely descriptions of what brains happen to do.',1.15,5.2,11.0,0.7,18,C.text,true);
+  callout(s,'Remove every normative standard and “rationality” collapses into causal psychology.',C.red);
+}
+{
+  const s=pptx.addSlide(); addTop(s,19,'Conclusion'); addSub(s,'Distinguishable does not mean cleanly separable.');
+  node(s,'F ≠ V',1.0,2.0,3.1,1.15,C.blue,C.paleBlue,28);
+  node(s,'F ⟂ V ?',5.1,2.0,3.1,1.15,C.orange,C.paleOrange,28);
+  node(s,'(Fₜ,Vₜ) →\n(Fₜ₊₁,Vₜ₊₁)',9.2,2.0,3.1,1.15,C.teal,C.paleTeal,21);
+  const lines=[['1. Not identical',C.blue],['2. Not always separable',C.orange],['3. Often dynamically entangled',C.teal]];
+  lines.forEach(([t,c],i)=>{s.addText(t,{x:2.0,y:4.0+i*0.58,w:9.3,h:0.42,fontSize:20,bold:true,color:c,align:'center',margin:0,fit:'shrink'});});
+  callout(s,'Putnam’s point is not that facts are values. It is that our best descriptions and our best evaluations often cannot be cleanly pulled apart.',C.ink);
+}
+
+fs.mkdirSync('Presentation',{recursive:true});
+pptx.writeFile({ fileName: 'Presentation/Putnam_Fact_Value_Entanglement_YouTube_Deck.pptx' });
