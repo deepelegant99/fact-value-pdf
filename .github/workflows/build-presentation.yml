@@ -38,42 +38,41 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libreoffice-impress poppler-utils fonts-liberation
 
-      - name: Build readable PowerPoint from Markdown
+      - name: Build PowerPoint
         run: node scripts/build_presentation.js
 
       - name: Convert PowerPoint to PDF
         run: |
-          soffice --headless --convert-to pdf --outdir Presentation Presentation/putnam-fact-value-slides.pptx
+          soffice --headless --convert-to pdf --outdir Presentation Presentation/Putnam_Fact_Value_Entanglement_YouTube_Deck.pptx
 
       - name: Quality checks
         run: |
           python - <<'PY'
           from pptx import Presentation
-          p='Presentation/putnam-fact-value-slides.pptx'
+          p='Presentation/Putnam_Fact_Value_Entanglement_YouTube_Deck.pptx'
           prs=Presentation(p)
-          assert len(prs.slides) >= 30, len(prs.slides)
-          for i in range(min(30, len(prs.slides))):
-              slide=prs.slides[i]
+          assert len(prs.slides) == 19, len(prs.slides)
+          for i, slide in enumerate(prs.slides, start=1):
               text=' '.join(sh.text for sh in slide.shapes if getattr(sh,'has_text_frame',False)).strip()
-              assert text, f'slide {i+1} is empty'
+              assert text, f'slide {i} is empty'
           print('PPTX QA OK:', len(prs.slides), 'slides')
           PY
-          pages=$(pdfinfo Presentation/putnam-fact-value-slides.pdf | awk '/^Pages:/ {print $2}')
-          test "$pages" -ge 30
+          pages=$(pdfinfo Presentation/Putnam_Fact_Value_Entanglement_YouTube_Deck.pdf | awk '/^Pages:/ {print $2}')
+          test "$pages" -eq 19
           echo "PDF QA OK: $pages pages"
 
       - name: Render preview pages
         run: |
           mkdir -p build-preview
-          pdftoppm -png -r 72 -f 1 -l 30 Presentation/putnam-fact-value-slides.pdf build-preview/slide >/dev/null 2>&1
+          pdftoppm -png -r 72 -f 1 -l 19 Presentation/Putnam_Fact_Value_Entanglement_YouTube_Deck.pdf build-preview/slide >/dev/null 2>&1
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: putnam-presentation
+          name: putnam-youtube-deck
           path: |
-            Presentation/putnam-fact-value-slides.pptx
-            Presentation/putnam-fact-value-slides.pdf
+            Presentation/Putnam_Fact_Value_Entanglement_YouTube_Deck.pptx
+            Presentation/Putnam_Fact_Value_Entanglement_YouTube_Deck.pdf
             build-preview/*.png
           retention-days: 7
 
@@ -81,8 +80,9 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Presentation/putnam-fact-value-slides.pptx Presentation/putnam-fact-value-slides.pdf
+          rm -f Presentation/putnam-fact-value-slides.pptx Presentation/putnam-fact-value-slides.pdf
+          git add -A Presentation
           if ! git diff --cached --quiet; then
-            git commit -m 'Build readable Putnam fact-value presentation'
+            git commit -m 'Build 19-slide Putnam YouTube presentation'
             git push
           fi
